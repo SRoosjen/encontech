@@ -192,19 +192,19 @@ f = 10**(-6)*Area*s/time #(l/s)
 flowpump = np.full(len(tt),f)
 for i in range(0,len(tt)):
     
-    A = np.average(P_po[i-1]) #Pressure pump out
-    B = np.average(T_poRA[i-1]) #temperature pump out
+    A = P_po[i-1] #Pressure pump out
+    B = T_poRA[i-1] #temperature pump out
     rho = PropsSI('Dmass','T',B+273.15,'P',A*pow(10,5),'R134a')
     m_ref[i-1] = flowpump[i-1]*rho/1000 #kg/s
-    C = np.average(T_HRA[i-1]) #temperature high or heater out
-    D = np.average(P_HRA[i-1]) #pressure high or engine in
-    E = np.average(T_hinRA[i-1]) #temperature heater in  
+    C = T_HRA[i-1] #temperature high or heater out
+    D = P_HRA[i-1] #pressure high or engine in
+    E = T_hinRA[i-1] #temperature heater in  
     H1 = PropsSI('H','T',C+273.15,'P',D*pow(10,5),'R134a')
     H2 = PropsSI('H','T',E+273.15,'P',D*pow(10,5),'R134a')
     Q_h[i-1] = m_ref[i-1]*(H1-H2)
     H3 = PropsSI('H','T',B+273.15,'P',A*pow(10,5),'R134a')
-    F = np.average(P_LRA[i-1]) #pressure low or pump in
-    G = np.average(T_LRA[i-1]) #temperature low or cooler out
+    F = P_LRA[i-1] #pressure low or pump in
+    G = T_LRA[i-1] #temperature low or cooler out
     H4 = PropsSI('H','T',G+273.15,'P',F*pow(10,5),'R134a')
     W_p[i-1] = m_ref[i-1]*(H3-H4)#/60 #W
     
