@@ -1,0 +1,637 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import os
+import numpy as np
+from CoolProp.CoolProp import PropsSI
+import math
+from tabulate import tabulate
+import scipy
+
+print(os.getcwd())
+
+#add saturation pressure and density for 
+#be sure that vapor is at the driver
+#heat to the cooler v*cp*dT for water heat taken by cooling water(TH-T6)
+#heat balance coolig and heating water
+#before operation colling water out = cooling water in
+#heat output from colling water
+
+df = pd.read_excel(r'C:\Users\Lenovo\.spyder-py3\IEE\exp5e.xlsx') #Ave.
+#df = pd.read_excel(r'C:\Users\Lenovo\.spyder-py3\IIEAEK2.xlsx') #Last
+
+#t = df['t'].tolist()
+P1  = df['P1b=engine in Ave. (bar)'].tolist() #P_High 
+P2  = df['P2=engine out Ave. (bar)'].tolist()
+P3  = df['P3=f. pump in Ave. (bar)'].tolist() #P_Low
+P4  = df['P4=oil Ave. (bar)'].tolist()
+P5  = df['P5=right chamber Ave. (bar)'].tolist()
+P6  = df['P6=left chamber Ave. (bar)'].tolist()
+P8  = df['P8=f. pump out Ave. (bar)'].tolist()  
+#RPM  = df['RPM Ave. (V)'].tolist()
+#flow  = df['flowmeter average Ave. (Lmin)'].tolist() #Oil flow 
+flow  = df['ch11 flowmeter profimess Ave. (Lmin)'].tolist() #Oil flow 
+T1  = df['T1=heater out Ave. (C)'].tolist() #T_High
+T2  = df['T2=heater in Ave. (C)'].tolist()
+T3  = df['T3=engine out Ave. (C)'].tolist()
+T4   = df['T4=pump out Ave. (C)'].tolist()
+T5  = df['T5=cooler in Ave. (C)'].tolist()
+T6  = df['T6=Heating water out Ave. (C)'].tolist()
+T7  = df['T7=cooling water out Ave. (C)'].tolist()
+T8  = df['T8=cooler out Ave. (C)'].tolist() #T_Low
+flow2 = df['ch 9 flowmeter Keyence Ave. (mlmin)'].tolist() #Ref flow
+
+t = np.linspace(0,len(P1),len(P1))
+print(t[-1])
+#t = np.array(t)
+P1=np.array(P1)
+P3=np.array(P3)
+DP = P1 - P3
+P4=np.array(P4)
+P5=np.array(P5)
+P6=np.array(P6)
+P8=np.array(P8)
+T1=np.array(T1)
+T2=np.array(T2)
+T3=np.array(T3)
+T4=np.array(T4)
+T5=np.array(T5)
+T6=np.array(T6)
+T7=np.array(T7)
+T8=np.array(T8)
+F_oil=np.array(flow)
+P_Oil = np.array(P4)
+F_ref = np.array(flow2)
+P2 = np.array(P2)
+T3 = np.array(T3)
+
+#recalculate the oil flow
+#F_oil = F_oil*1.0415 + 0.075
+
+#General data plots
+plt.figure()
+plt.plot(t,T1, label='Heater out')
+plt.plot(t,T2, label='Heater in')
+plt.plot(t,T3, label='Engine out') 
+plt.plot(t,T4, label='Pump out')   
+plt.plot(t,T5, label='Cooler in') 
+plt.plot(t,T6, label='Heating water out ') 
+plt.plot(t,T7, label='Cooling water out') 
+plt.plot(t,T8, label='Cooler out') 
+plt.ylabel('Temperature ($\degree C$)')
+plt.xlabel('Time (s)')
+plt.legend()
+plt.grid ()
+plt.title('Temperatures')
+plt.show()
+
+plt.figure()
+plt.plot(t,P1, label='Engine in') 
+plt.plot(t,P2, label='Engine out')
+plt.plot(t,P3, label='Pump in')
+plt.plot(t,P8, label='Pump out')
+plt.plot(t,P4, label='Oil')
+#plt.plot(t,P5, label='P5-right chamber')
+#plt.plot(t,P6, label='P6-left chamber')
+plt.ylabel('Pressure (bar)')
+plt.xlabel('Time (s)')
+plt.legend()
+plt.grid ()
+plt.title('Pressures')
+plt.show()
+
+# Define the time range
+t_min = 0 #8900#5320#3000
+t_max = 1299 #9700#5950#3700
+
+
+
+# Find indices for temperatures within the specified range
+indices_range = np.where((t >= t_min) & (t <= t_max))[0]
+
+# Separate data based on time range
+range_data = {
+    'T_H': T1[indices_range],
+    'T_L': T8[indices_range],
+    'P_H': P1[indices_range],
+    'P_L': P3[indices_range],
+    'F_oil': F_oil[indices_range],
+    'P_oil': P4[indices_range],
+    'P_po': P8[indices_range],
+    'T_po': T4[indices_range],
+    'F_ref':F_ref[indices_range],
+    'T_hin':T2[indices_range],
+    'T_cwater':T7[indices_range],
+    'P_eng,out':P2[indices_range],
+    'T_eng,out':T3[indices_range]
+}
+
+# Save each dataset in new NumPy arrays
+T_H = range_data['T_H']
+T_L = range_data['T_L']
+P_H = range_data['P_H']
+P_L = range_data['P_L']
+F_oil = range_data['F_oil']
+F_ref = range_data['F_ref']
+P_oil = range_data['P_oil']
+P_po = range_data['P_po']
+T_po = range_data['T_po']
+T_hin = range_data['T_hin']
+T_cwater = range_data['T_cwater']
+P_engout = range_data['P_eng,out']
+T_engout = range_data['T_eng,out']
+
+#Set rolling average window
+w = 20
+#Calculating rolling average for the dataset
+T_HRA = np.convolve(T_H, np.ones(w)/w, mode='valid')
+T_LRA = np.convolve(T_L, np.ones(w)/w, mode='valid')
+P_HRA = np.convolve(P_H, np.ones(w)/w, mode='valid')
+P_LRA = np.convolve(P_L, np.ones(w)/w, mode='valid')
+P_oilRA = np.convolve(P_oil, np.ones(w)/w, mode='valid')
+F_oilRA = np.convolve(F_oil, np.ones(w)/w, mode='valid')
+F_refRA = np.convolve(F_ref, np.ones(w)/w, mode='valid')
+P_poRA = np.convolve(P_po, np.ones(w)/w, mode='valid')
+T_poRA = np.convolve(T_po, np.ones(w)/w, mode='valid')
+T_hinRA = np.convolve(T_hin, np.ones(w)/w, mode='valid')
+T_cwaterRA = np.convolve(T_cwater, np.ones(w)/w, mode='valid')
+P_engoutRA = np.convolve(P_engout, np.ones(w)/w, mode='valid')
+T_engoutRA = np.convolve(T_engout, np.ones(w)/w, mode='valid')
+
+# Create a time array corresponding to the rolling average data
+tt = t[:len(T_HRA)]
+ 
+#Create time array corresponding to original data
+t = np.linspace(0,len(P_H),len(P_H))
+
+Power=F_oilRA*100*P_oilRA/60 #Power output W
+RPM = 1000*F_oilRA/5.54 
+
+IntFlow = scipy.integrate.trapezoid(F_ref/1000,t)/(t_max-t_min)
+
+#Initialize arrays
+W_p1 = np.zeros(len(tt))
+W_p2 = np.zeros(len(tt))
+W_p3 = np.zeros(len(tt))
+Q_h1 = np.zeros(len(tt))
+Q_h2 = np.zeros(len(tt))
+Q_h3 = np.zeros(len(tt))
+m_ref1 = np.zeros(len(tt))
+m_ref2 = np.zeros(len(tt))
+m_ref3 = np.zeros(len(tt))
+rho11 = np.zeros(len(tt))
+rho22 = np.zeros(len(tt))
+Force1 = np.zeros(len(tt))
+Force2 = np.zeros(len(tt))
+
+#Pump full cycle time
+time = 4 #s
+#Oil pump flowrate
+Area = math.pi*(20**2-8**2)
+s = 94 #mm
+f = 2*pow(10,-6)*Area*s/time
+f = np.full(len(tt),f) 
+
+#Calculate R134a flow via the driver 
+Area1 = math.pi*40**2 
+s = 92 #mm 
+f1 = 2*pow(10,-6)*Area1*s/time #(l/s)
+flowpump1=np.full(len(tt),f1)
+print('Area driver',Area1)
+
+#Calculate R134a flow via the pump
+Area2 = math.pi*(20**2-8**2) + math.pi*20**2
+s = 70 #mm 
+f2 = pow(10,-6)*Area2*s/time #(l/s)
+flowpump2 = np.full(len(tt),f2)
+print('Area pump',Area2)
+
+print(tabulate([['Driver', 2*pow(10,-6)*Area1*92], ['Pump', pow(10,-6)*Area2*100], ['Oil', 2*pow(10,-6)*Area*92]], headers=['', 'Volume at full stroke (l)']))
+
+for i in range(0,len(tt)):
+    
+    #R134a mass flowrate via driver
+    rho = PropsSI('Dmass','T|gas',T_HRA[i-1]+273.15,'P',(P_HRA[i-1]*pow(10,5)+101325),'R134a')
+    #rho = PropsSI('Dmass','T',T_engoutRA[i-1]+273.15,'P',(P_engoutRA[i-1]*pow(10,5)+101325),'R134a')
+    m_ref1[i-1] = f1*rho/1000 #kg/s
+    rho11[i-1] = rho
+    
+    #R134a mass flowrate via pump
+    A = P_poRA[i-1] #Pressure pump out
+    B = T_poRA[i-1] #temperature pump out
+    rho2 = PropsSI('Dmass','T',A+273.15,'P',(B*pow(10,5)+101325),'R134a')
+    #rho2 = PropsSI('Dmass','T',T_LRA[i-1]+273.15,'P',(P_LRA[i-1]*pow(10,5)+101325),'R134a')
+    m_ref2[i-1] = f2*rho2/1000 #kg/s
+    rho22[i-1] = rho2
+    
+    #R134a mass flowrate via flowmeter
+    m_ref3[i-1] = F_refRA[i-1]*rho2*pow(10,-6) #kg/min
+    
+    #Heater consumption theoretical 
+    C = T_HRA[i-1] #temperature high or heater out
+    D = P_HRA[i-1] #pressure high or engine in
+    E = T_hinRA[i-1] #temperature heater in  
+    H1 = PropsSI('H','T',C+273.15,'P',(D*pow(10,5)+101325),'R134a')
+    H2 = PropsSI('H','T',E+273.15,'P',(D*pow(10,5)+101325),'R134a')
+    Q_h1[i-1] = m_ref1[i-1]*(H1-H2) #via driver
+    Q_h2[i-1] = m_ref2[i-1]*(H1-H2) #via pump
+    Q_h3[i-1] = m_ref3[i-1]*(H1-H2)/60 #via flowmeter
+      
+    #Pump work
+    H3 = PropsSI('H','T',B+273.15,'P',(A*pow(10,5)+101325),'R134a') #Hout
+    Sout = PropsSI('S','T',B+273.15,'P',(A*pow(10,5)+101325),'R134a')
+    F = P_LRA[i-1] #pressure low or pump in
+    G = T_LRA[i-1] #temperature low or cooler out
+    #H4 = PropsSI('H','T',G+271.15,'P',(F*pow(10,5)+101325),'R134a')
+    H4 = PropsSI('H','S',Sout,'P',(F*pow(10,5)+101325),'R134a')
+    #H4 = PropsSI('H','S',Sout,'T',G+271.15,'R134a')
+    W_p1[i-1] = m_ref1[i-1]*(H3-H4) #via driver and isentropic relation
+    #W_p2[i-1] = m_ref2[i-1]*(H3-H4) #via pump
+    #W_p3[i-1] = m_ref3[i-1]*(H3-H4) #via flowmeter
+       
+    #Calculate work by VdP
+    W_p2[i-1] = (f2)*(P_poRA[i-1]*pow(10,5)-P_LRA[i-1]*pow(10,5))*0.001 #pump
+    W_p3[i-1] = F_refRA[i-1]*(P_poRA[i-1]*pow(10,5)-P_LRA[i-1]*pow(10,5))*0.001*0.001/60 #flowmeter
+    #W_p2[i-1] = (m_ref1[i-1]/rho2)*(P_poRA[i-1]*pow(10,5)-P_LRA[i-1]*pow(10,5))
+    
+    #Force 
+    Force1[i-1] = (P_HRA[i-1]*pow(10,5)-P_LRA[i-1]*pow(10,5))*Area1*pow(10,-6)
+    Force2[i-1] = (P_oilRA[i-1]*pow(10,5)-0.3*pow(10,5))*Area*pow(10,-6)
+
+#Heater consumption based on measurments
+Begin = 233.04 #kWh
+End = 235.7 #kWh
+Q_hel = 1000*(End-Begin)/((t[-1]/3600))
+Q_hel = np.full(len(tt),Q_hel)
+
+#Efficiency 
+eff1 = 100*(Power-W_p1)/Q_h1 # via mdH and driver
+eff2 = 100*(Power-W_p2)/Q_h2 # via VdP and  pump
+eff3 = 100*(Power-W_p3)/Q_h3 # via VdP and flowmeter
+eff4 = 100*(Power-W_p3)/Q_hel #kWh
+Carnoteff = (1-(T_LRA+273.15)/(T_HRA+273.15))*100
+
+    
+plt.figure()
+plt.plot(t,F_ref*0.001, label='Original')
+plt.plot(tt,F_refRA*0.001,label='Rolling Average')
+plt.title('R134a flow')
+plt.ylabel('Flow (L/min)')
+plt.xlabel('Time (s)')
+plt.grid()
+plt.legend()
+plt.show()
+
+
+#Plots for Power output
+plt.figure()
+plt.plot(t,F_oil, label='Original') 
+plt.plot(tt,F_oilRA,label='Rolling Average')
+plt.plot(tt,f*60,label='Full stroke')
+plt.ylabel('Flow (l/min)')
+plt.xlabel('Time (s)')
+plt.legend()
+plt.grid ()
+plt.title('Oil flowrate')
+plt.show()
+
+plt.figure()
+plt.plot(t,P_oil, label='Original') 
+plt.plot(tt,P_oilRA,label='Rolling Average')
+plt.ylabel('Pressure (bar)')
+plt.xlabel('Time (s)')
+plt.legend()
+plt.grid ()
+plt.title('P_oil')
+plt.show()
+
+plt.figure()
+plt.plot(tt,Power) 
+plt.ylabel('Power (W)')
+plt.xlabel('Time (s)')
+plt.grid ()
+plt.title('Power output')
+plt.show()
+
+plt.figure()
+plt.plot(tt,RPM) 
+plt.ylabel('RPM')
+plt.xlabel('Time (s)')
+plt.grid ()
+plt.title('Hydraulic motor RPM')
+plt.show() 
+
+#Massflowrate from driver and pump and heat input
+plt.figure()
+plt.plot(t,T_H, label='Original') 
+plt.plot(tt,T_HRA,label='Rolling Average')
+plt.ylabel('Tempeature ($\degree C$)')
+plt.xlabel('Time (s)')
+plt.legend()
+plt.grid ()
+plt.title('T_High (heater out)')
+plt.show()
+
+plt.figure()
+plt.plot(t,P_H, label='Original') 
+plt.plot(tt,P_HRA,label='Rolling Average')
+plt.ylabel('Pressure (bar)')
+plt.xlabel('Time (s)')
+plt.legend()
+plt.grid ()
+plt.title('P_High (engine in)')
+plt.show()
+
+plt.figure()
+#plt.plot(tt,flowpump1*60,label='driver')
+plt.plot(tt,F_refRA*0.001,label='flowmeter')
+plt.plot(tt,flowpump2*60,label='pump')
+
+plt.plot() 
+plt.ylabel('R134a (l/min))')
+plt.xlabel('Time (s)')
+plt.grid ()
+plt.title('R134a flowrate')
+plt.legend()
+plt.show()
+
+plt.figure()
+plt.plot(tt,rho11) 
+plt.ylabel('Density (kg/m3)')
+plt.xlabel('Time (s)')
+plt.grid ()
+plt.title('Density driver')
+plt.show()
+
+
+plt.figure()
+plt.plot(tt,rho22) 
+plt.ylabel('Density (kg/m3)')
+plt.xlabel('Time (s)')
+plt.grid ()
+plt.title('Density pump')
+plt.legend()
+plt.show()
+
+plt.figure()
+plt.plot(tt,m_ref1*60,label='driver')
+plt.plot(tt,m_ref2*60,label='pump')
+plt.plot(tt,m_ref3,label='flowmeter') 
+plt.ylabel('m_R134a (kg/min))')
+plt.xlabel('Time (s)')
+plt.grid ()
+plt.title('R134a mass flowrate')
+plt.legend()
+plt.show()
+
+plt.figure()
+plt.plot(tt,Q_h1, label ='driver')
+plt.plot(tt,Q_h2, label ='pump') 
+plt.plot(tt,Q_h3, label ='flowmeter') 
+plt.plot(tt,Q_hel,label = 'kWh')
+plt.ylabel('Power (W)')
+plt.xlabel('Time (s)')
+plt.grid ()
+plt.title('Heat input')
+plt.legend()
+plt.show()
+
+#Pump
+plt.figure()
+plt.plot(tt,T_LRA, label='cooler out or pump in') 
+plt.plot(tt,T_poRA,label='pump out')
+plt.ylabel('Tempeature ($\degree C$)')
+plt.xlabel('Time (s)')
+plt.legend()
+plt.grid ()
+plt.title('Refrigerant heating in the pump')
+plt.show()
+
+plt.figure()
+plt.plot(t,T_L, label='Original') 
+plt.plot(tt,T_LRA,label='Rolling Average')
+plt.ylabel('Tempeature ($\degree C$)')
+plt.xlabel('Time (s)')
+plt.legend()
+plt.grid ()
+plt.title('T_Low (cooler out)')
+plt.show()
+
+plt.figure()
+plt.plot(t,P_L, label='Original') 
+plt.plot(tt,P_LRA,label='Rolling Average')
+plt.ylabel('Pressure (bar)')
+plt.xlabel('Time (s)')
+plt.legend()
+plt.grid ()
+plt.title('P_Low (pump in)')
+plt.show()
+
+plt.figure()
+plt.plot(t,T_po, label='Original') 
+plt.plot(tt,T_poRA,label='Rolling Average')
+plt.ylabel('Tempeature ($\degree C$)')
+plt.xlabel('Time (s)')
+plt.legend()
+plt.grid ()
+plt.title('T_pump,out')
+plt.show()
+
+plt.figure()
+plt.plot(t,P_po, label='Original') 
+plt.plot(tt,P_poRA,label='Rolling Average')
+plt.ylabel('Pressure (bar)')
+plt.xlabel('Time (s)')
+plt.legend()
+plt.grid ()
+plt.title('P_pump,out')
+plt.show()
+
+
+plt.figure()
+plt.plot(tt,W_p1,label='mDH-driver') 
+plt.plot(tt,W_p3,label='Vdp-flowmeter')
+plt.plot(tt,W_p2,label='VdP-pump')
+plt.ylabel('Power (W)')
+plt.xlabel('Time (s)')
+plt.grid ()
+plt.title('Pump work')
+plt.legend()
+plt.show()
+
+#Efficiency
+plt.figure()
+plt.plot(tt,eff1,label='driver')
+plt.plot(tt,eff2,label='pump')
+plt.plot(tt,eff3,label='flowmeter')
+plt.plot(tt,eff4,label='kWh') 
+plt.ylabel('n (%)')
+plt.xlabel('Time (s)')
+plt.grid ()
+plt.legend()
+plt.title('Efficiency')
+plt.show()
+
+
+plt.figure()
+plt.plot(tt,Carnoteff) 
+plt.ylabel('n (%)')
+plt.xlabel('Time (s)')
+plt.grid ()
+plt.title('Carnot Efficiency')
+plt.show()
+
+plt.figure()
+plt.plot(tt,100*eff1/Carnoteff,label = 'driver') 
+plt.plot(tt,100*eff2/Carnoteff,label = 'pump')
+plt.plot(tt,100*eff3/Carnoteff,label = 'flowmeter')  
+plt.plot(tt,100*eff4/Carnoteff,label = 'kWh') 
+plt.ylabel('n (%)')
+plt.xlabel('Time (s)')
+plt.grid ()
+plt.legend()
+plt.title('Efficiency as a percentage of Carnot efficiency')
+plt.show()
+
+#Force DPR13a and Poil relation
+plt.figure()
+plt.plot(tt,P_HRA-P_LRA, label='(P_H-P_L)R134a') 
+plt.plot(tt,P_oilRA,label='P_Oil')
+plt.ylabel('Pressure (bar)')
+plt.xlabel('Time (s)')
+plt.legend()
+plt.grid ()
+plt.title('DP_R134a vs P_oil relation')
+plt.show()
+
+plt.figure()
+plt.plot(tt,Force1/1000,label='(P_H-P_L)*A_driver')
+plt.plot(tt,Force2/1000,label='(P_oil-dp_oil)*A_oil')
+plt.ylabel('Force (kN)')
+plt.xlabel('Time (s)')
+plt.grid()
+plt.legend()
+plt.title('Force on the driver and oil pistons')
+plt.show()
+
+
+
+
+
+#Rest
+plt.figure()
+plt.plot(t,T_cwater) 
+plt.ylabel('Tempeature ($\degree C$)')
+plt.xlabel('Time (s)')
+#plt.legend()
+plt.grid ()
+plt.title('Cooling water')
+plt.show()
+
+
+plt.figure()
+plt.plot(t,T_hin, label='Original') 
+plt.plot(tt,T_hinRA,label='Rolling Average')
+plt.ylabel('Tempeature ($\degree C$)')
+plt.xlabel('Time (s)')
+plt.legend()
+plt.grid ()
+plt.title('T_heater,in')
+plt.show()
+
+plt.figure()
+plt.plot(t,T_engout, label='Original') 
+plt.plot(tt,T_engoutRA,label='Rolling Average')
+plt.ylabel('Tempeature ($\degree C$)')
+plt.xlabel('Time (s)')
+plt.legend()
+plt.grid ()
+plt.title('T_engine,out')
+plt.show()
+
+
+plt.figure()
+plt.plot(t,P_engout, label='Original') 
+plt.plot(tt,P_engoutRA,label='Rolling Average')
+plt.ylabel('Pressure (bar)')
+plt.xlabel('Time (s)')
+plt.legend()
+plt.grid ()
+plt.title('P_engine,out')
+plt.show()
+
+
+
+
+
+plt.figure()
+plt.plot(t,P_engout, label='Original') 
+plt.plot(tt,P_engoutRA,label='Rolling Average')
+plt.ylabel('Pressure (bar)')
+plt.xlabel('Time (s)')
+plt.legend()
+plt.grid ()
+plt.title('Pressure engine out')
+plt.show()
+
+plt.figure()
+plt.plot(t,T_engout, label='Original') 
+plt.plot(tt,T_engoutRA,label='Rolling Average')
+plt.ylabel('Tempeature ($\degree C$)')
+plt.xlabel('Time (s)')
+plt.legend()
+plt.grid ()
+plt.title('Temperature engine out')
+plt.show()
+   
+
+
+
+
+
+#Load RPM and kWh pulses logged every 10ms
+
+#df = pd.read_excel(r'C:\Users\Lenovo\.spyder-py3\IEE\6bRPMmin.xlsx')
+#RPM_L  = df['ch10 RPM pulses Min. (V)'].tolist()
+#RPM_L = np.array(RPM_L)
+#kWh_L = df['ch12 kWh pulse  Last (V)'].tolist()
+#ttt = np.linspace(0,len(RPM_L)*0.01,len(RPM_L))
+#RPM10 = np.zeros(len(ttt))
+#kWh10 = np.zeros(len(ttt))
+
+#ch12 kWh pulse  Last (V)
+
+
+#for i in range (0,len(ttt)):
+#    if (RPM_L[i-1] == 0):
+ #    RPM10[i-1] = 1
+    
+ #   if (kWh_L==0):
+  #      kWh10[i-1] = 2500
+        
+
+#plt.figure()
+#plt.plot(ttt[0:550],RPM10[0:550])
+#plt.show()            
+
+#rotations = []
+#w=0
+#i = 6000
+#while (i<= len(ttt)):
+#     rot = np.count_nonzero(RPM10[w:i])
+#     rotations.append(rot)
+     
+#     w = w + 6000
+#     i = i + 6000
+     
+     
+#plt.figure()
+#plt.plot(rotations)
+
+
+#rotations = np.array(rotations)
+#oil = rotations*5.54/1000
+
+#plt.figure()
+#plt.plot(oil)
+
+
